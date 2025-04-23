@@ -5,6 +5,9 @@
 #include <QTextEdit>
 #include <QLabel>
 #include <QTextCodec>
+#include "syntaxhighlighter.h"
+#include "tabmanager.h"
+#include "autosavemanager.h"
 
 class FindDialog;
 class ReplaceDialog;
@@ -30,6 +33,7 @@ private slots:
     void openFile();
     void saveFile();
     void saveAsFile();
+    bool saveFileAs(const QString &fileName);
     void printFile();
 
     // Edit operations
@@ -57,10 +61,24 @@ private slots:
     // About dialog
     void about();
 
+    // Language selection
+    void setLanguageJava();
+    void setLanguageCpp();
+    void setLanguagePython();
+    void setLanguageNone();
+
+    // Tab management
+    void onTabChanged();
+    void onTextChanged();
+
+    // Auto save settings
+    void setAutoSaveInterval();
+    void toggleAutoSave();
+
 private:
     Ui::MyNotepad *ui;
-    QString currentFile;
-    QTextEdit *textEdit;
+    TabManager *tabManager;
+    AutoSaveManager *autoSaveManager;
     QLabel *statusLabel;
     QLabel *encodingLabel;
     FindDialog *findDialog;
@@ -71,11 +89,11 @@ private:
     void createStatusBar();
     void setupConnections();
     void loadFile(const QString &fileName);
-    bool saveFileAs(const QString &fileName);
     void setCurrentFile(const QString &fileName);
     QString strippedName(const QString &fullFileName);
     void updateWindowTitle();
     bool maybeSave();
+    void updateLanguageMenu();
 };
 
 #endif // MYNOTEPAD_H

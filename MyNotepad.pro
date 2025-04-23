@@ -28,12 +28,18 @@ SOURCES += \
         main.cpp \
         mynotepad.cpp \
         finddialog.cpp \
-        replacedialog.cpp
+        replacedialog.cpp \
+        syntaxhighlighter.cpp \
+        tabmanager.cpp \
+        autosavemanager.cpp
 
 HEADERS += \
         mynotepad.h \
         finddialog.h \
-        replacedialog.h
+        replacedialog.h \
+        syntaxhighlighter.h \
+        tabmanager.h \
+        autosavemanager.h
 
 FORMS += \
         mynotepad.ui

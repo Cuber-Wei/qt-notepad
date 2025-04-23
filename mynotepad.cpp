@@ -24,6 +24,7 @@
 #include <QTextCodec>
 #include <QSettings>
 #include <QCloseEvent>
+#include <QInputDialog>
 
 #if defined(QT_PRINTSUPPORT_LIB)
     #include <QtPrintSupport/qtprintsupportglobal.h>
@@ -43,9 +44,12 @@ MyNotepad::MyNotepad(QWidget *parent) :
 {
     ui->setupUi(this);
     
-    // Create text edit
-    textEdit = new QTextEdit(this);
-    setCentralWidget(textEdit);
+    // Create tab manager
+    tabManager = new TabManager(this);
+    setCentralWidget(tabManager);
+    
+    // Create auto save manager
+    autoSaveManager = new AutoSaveManager(tabManager, this);
     
     // Create UI elements
     createMenus();
@@ -60,7 +64,12 @@ MyNotepad::MyNotepad(QWidget *parent) :
     // Load settings
     QSettings settings;
     QFont font = settings.value("font", QFont("Consolas", 10)).value<QFont>();
-    textEdit->setFont(font);
+    
+    // 不再创建初始标签页
+    // 当用户第一次打开文件或新建文件时会自动创建标签页
+
+    // Restore auto-saved tabs
+    autoSaveManager->restoreTabs();
 }
 
 MyNotepad::~MyNotepad()
@@ -72,53 +81,67 @@ MyNotepad::~MyNotepad()
 
 void MyNotepad::createMenus()
 {
-    // File menu
-    QMenu *fileMenu = menuBar()->addMenu(tr("&文件"));
-    fileMenu->addAction(tr("&新建"), this, &MyNotepad::newFile, QKeySequence::New);
-    fileMenu->addAction(tr("&打开..."), this, &MyNotepad::openFile, QKeySequence::Open);
-    fileMenu->addAction(tr("&保存"), this, &MyNotepad::saveFile, QKeySequence::Save);
-    fileMenu->addAction(tr("另存为..."), this, &MyNotepad::saveAsFile, QKeySequence::SaveAs);
+    // 文件菜单
+    QMenu *fileMenu = menuBar()->addMenu(tr("文件(&F)"));
+    fileMenu->addAction(tr("新建(&N)"), this, &MyNotepad::newFile, QKeySequence::New);
+    fileMenu->addAction(tr("打开(&O)..."), this, &MyNotepad::openFile, QKeySequence::Open);
+    fileMenu->addAction(tr("保存(&S)"), this, &MyNotepad::saveFile, QKeySequence::Save);
+    fileMenu->addAction(tr("另存为(&A)..."), this, &MyNotepad::saveAsFile, QKeySequence::SaveAs);
     fileMenu->addSeparator();
-    fileMenu->addAction(tr("&退出"), this, &QWidget::close, QKeySequence::Quit);
+    fileMenu->addAction(tr("退出(&X)"), this, &QWidget::close, QKeySequence::Quit);
 
-    // Edit menu
-    QMenu *editMenu = menuBar()->addMenu(tr("&编辑"));
-    editMenu->addAction(tr("&撤销"), this, &MyNotepad::undo, QKeySequence::Undo);
-    editMenu->addAction(tr("&重做"), this, &MyNotepad::redo, QKeySequence::Redo);
+    // 编辑菜单
+    QMenu *editMenu = menuBar()->addMenu(tr("编辑(&E)"));
+    editMenu->addAction(tr("撤销(&U)"), this, &MyNotepad::undo, QKeySequence::Undo);
+    editMenu->addAction(tr("重做(&R)"), this, &MyNotepad::redo, QKeySequence::Redo);
     editMenu->addSeparator();
-    editMenu->addAction(tr("&剪切"), this, &MyNotepad::cut, QKeySequence::Cut);
-    editMenu->addAction(tr("&复制"), this, &MyNotepad::copy, QKeySequence::Copy);
-    editMenu->addAction(tr("&粘贴"), this, &MyNotepad::paste, QKeySequence::Paste);
-    editMenu->addAction(tr("&全选"), this, &MyNotepad::selectAll, QKeySequence::SelectAll);
+    editMenu->addAction(tr("剪切(&T)"), this, &MyNotepad::cut, QKeySequence::Cut);
+    editMenu->addAction(tr("复制(&C)"), this, &MyNotepad::copy, QKeySequence::Copy);
+    editMenu->addAction(tr("粘贴(&P)"), this, &MyNotepad::paste, QKeySequence::Paste);
+    editMenu->addAction(tr("全选(&A)"), this, &MyNotepad::selectAll, QKeySequence::SelectAll);
 
-    // Format menu
-    QMenu *formatMenu = menuBar()->addMenu(tr("&格式"));
-    formatMenu->addAction(tr("&字体..."), this, &MyNotepad::setFont);
-    formatMenu->addAction(tr("&字体颜色..."), this, &MyNotepad::setFontColor);
+    // 格式菜单
+    QMenu *formatMenu = menuBar()->addMenu(tr("格式(&O)"));
+    formatMenu->addAction(tr("字体(&F)..."), this, &MyNotepad::setFont);
+    formatMenu->addAction(tr("字体颜色(&C)..."), this, &MyNotepad::setFontColor);
 
-    // Find menu
-    QMenu *findMenu = menuBar()->addMenu(tr("&查找"));
-    findMenu->addAction(tr("&查找..."), this, &MyNotepad::find, QKeySequence::Find);
-    findMenu->addAction(tr("查找 下一个"), this, &MyNotepad::findNext, QKeySequence::FindNext);
-    findMenu->addAction(tr("查找 上一个"), this, &MyNotepad::findPrevious, QKeySequence::FindPrevious);
-    findMenu->addAction(tr("&替换..."), this, &MyNotepad::replace, QKeySequence::Replace);
+    // 语言菜单
+    QMenu *languageMenu = menuBar()->addMenu(tr("语言(&L)"));
+    languageMenu->addAction(tr("无(&N)"), this, &MyNotepad::setLanguageNone);
+    languageMenu->addAction(tr("Java(&J)"), this, &MyNotepad::setLanguageJava);
+    languageMenu->addAction(tr("C++(&C)"), this, &MyNotepad::setLanguageCpp);
+    languageMenu->addAction(tr("Python(&P)"), this, &MyNotepad::setLanguagePython);
 
-    // Help menu
-    QMenu *helpMenu = menuBar()->addMenu(tr("&帮助"));
-    helpMenu->addAction(tr("&关于"), this, &MyNotepad::about);
+    // 查找菜单
+    QMenu *findMenu = menuBar()->addMenu(tr("查找(&S)"));
+    findMenu->addAction(tr("查找(&F)..."), this, &MyNotepad::find, QKeySequence::Find);
+    findMenu->addAction(tr("查找下一个(&N)"), this, &MyNotepad::findNext, QKeySequence::FindNext);
+    findMenu->addAction(tr("查找上一个(&P)"), this, &MyNotepad::findPrevious, QKeySequence::FindPrevious);
+    findMenu->addAction(tr("替换(&R)..."), this, &MyNotepad::replace, QKeySequence::Replace);
+
+    // 自动保存菜单
+    QMenu *autoSaveMenu = menuBar()->addMenu(tr("自动保存(&A)"));
+    QAction *enableAutoSaveAction = autoSaveMenu->addAction(tr("启用自动保存(&E)"), this, &MyNotepad::toggleAutoSave);
+    enableAutoSaveAction->setCheckable(true);
+    enableAutoSaveAction->setChecked(autoSaveManager->isAutoSaveEnabled());
+    autoSaveMenu->addAction(tr("设置间隔(&I)..."), this, &MyNotepad::setAutoSaveInterval);
+
+    // 帮助菜单
+    QMenu *helpMenu = menuBar()->addMenu(tr("帮助(&H)"));
+    helpMenu->addAction(tr("关于(&A)"), this, &MyNotepad::about);
 }
 
 void MyNotepad::createToolBars()
 {
-    QToolBar *fileToolBar = addToolBar(tr("文件"));
-    fileToolBar->addAction(tr("新建"), this, &MyNotepad::newFile);
-    fileToolBar->addAction(tr("打开"), this, &MyNotepad::openFile);
-    fileToolBar->addAction(tr("保存"), this, &MyNotepad::saveFile);
+    QToolBar *fileToolBar = addToolBar(tr("File"));
+    fileToolBar->addAction(tr("New"), this, &MyNotepad::newFile);
+    fileToolBar->addAction(tr("Open"), this, &MyNotepad::openFile);
+    fileToolBar->addAction(tr("Save"), this, &MyNotepad::saveFile);
 
-    QToolBar *editToolBar = addToolBar(tr("编辑"));
-    editToolBar->addAction(tr("剪切"), this, &MyNotepad::cut);
-    editToolBar->addAction(tr("复制"), this, &MyNotepad::copy);
-    editToolBar->addAction(tr("粘贴"), this, &MyNotepad::paste);
+    QToolBar *editToolBar = addToolBar(tr("Edit"));
+    editToolBar->addAction(tr("Cut"), this, &MyNotepad::cut);
+    editToolBar->addAction(tr("Copy"), this, &MyNotepad::copy);
+    editToolBar->addAction(tr("Paste"), this, &MyNotepad::paste);
 }
 
 void MyNotepad::createStatusBar()
@@ -132,17 +155,14 @@ void MyNotepad::createStatusBar()
 
 void MyNotepad::setupConnections()
 {
-    connect(textEdit->document(), &QTextDocument::modificationChanged,
-            this, &MyNotepad::documentModified);
-    connect(textEdit, &QTextEdit::cursorPositionChanged,
-            this, &MyNotepad::updateCursorPosition);
+    connect(tabManager, &TabManager::currentTabChanged, this, &MyNotepad::onTabChanged);
+    connect(tabManager, &TabManager::textChanged, this, &MyNotepad::onTextChanged);
 }
 
 void MyNotepad::newFile()
 {
     if (maybeSave()) {
-        textEdit->clear();
-        setCurrentFile(QString());
+        tabManager->addNewTab();
     }
 }
 
@@ -153,8 +173,12 @@ void MyNotepad::openFile()
             tr("打开文件"), QString(),
             tr("文本文件 (*.txt);;所有文件 (*)"));
             
-        if (!fileName.isEmpty())
+        if (!fileName.isEmpty()) {
+            // 创建新标签页并加载文件
+            int index = tabManager->addNewTab();
+            tabManager->setCurrentIndex(index);
             loadFile(fileName);
+        }
     }
 }
 
@@ -168,27 +192,39 @@ void MyNotepad::loadFile(const QString &fileName)
         return;
     }
 
+    // 设置文件编码
     QTextStream in(&file);
     QTextCodec *codec = QTextCodec::codecForUtfText(file.peek(1024), QTextCodec::codecForName("UTF-8"));
     in.setCodec(codec);
-    textEdit->setPlainText(in.readAll());
-    
-    setCurrentFile(fileName);
-    encodingLabel->setText(codec->name());
+
+    // 使用当前标签页，而不是创建新标签页
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->setPlainText(in.readAll());
+        tabManager->setCurrentTabPath(fileName);
+        tabManager->setCurrentTabTitle(QFileInfo(fileName).fileName());
+        tabManager->setCurrentTabModified(false);
+        encodingLabel->setText(codec->name());
+    }
 }
 
 void MyNotepad::saveFile()
 {
-    if (currentFile.isEmpty()) {
-        QString fileName = QFileDialog::getSaveFileName(this,
-            tr("另存为"), QString(),
-            tr("文本文件 (*.txt);;所有文件 (*)"));
-            
-        if (!fileName.isEmpty()) {
-            saveFileAs(fileName);
-        }
+    QString path = tabManager->currentTabPath();
+    if (path.isEmpty()) {
+        saveAsFile();
     } else {
-        saveFileAs(currentFile);
+        saveFileAs(path);
+    }
+}
+
+void MyNotepad::saveAsFile()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("另存为"), QString(),
+        tr("文本文件 (*.txt);;所有文件 (*)"));
+        
+    if (!fileName.isEmpty()) {
+        saveFileAs(fileName);
     }
 }
 
@@ -204,23 +240,28 @@ bool MyNotepad::saveFileAs(const QString &fileName)
 
     QTextStream out(&file);
     out.setCodec("UTF-8");
-    out << textEdit->toPlainText();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        out << editor->toPlainText();
+    }
     
-    setCurrentFile(fileName);
+    tabManager->setCurrentTabPath(fileName);
+    tabManager->setCurrentTabModified(false);
     return true;
 }
 
 void MyNotepad::setCurrentFile(const QString &fileName)
 {
-    currentFile = fileName;
-    textEdit->document()->setModified(false);
+    tabManager->setCurrentTabPath(fileName);
     updateWindowTitle();
 }
 
 void MyNotepad::updateWindowTitle()
 {
-    setWindowTitle(tr("%1[*] - MyNotepad")
-        .arg(currentFile.isEmpty() ? tr("Untitled") : strippedName(currentFile)));
+    QString title = tabManager->currentTabTitle();
+    if (tabManager->isCurrentTabModified()) {
+        title += " *";
+    }
+    setWindowTitle(tr("%1 - MyNotepad").arg(title));
 }
 
 QString MyNotepad::strippedName(const QString &fullFileName)
@@ -230,25 +271,29 @@ QString MyNotepad::strippedName(const QString &fullFileName)
 
 bool MyNotepad::maybeSave()
 {
-    if (!textEdit->document()->isModified())
-        return true;
-
-    QMessageBox::StandardButton ret = QMessageBox::warning(this, tr("MyNotepad"),
-        tr("文档已修改。\n"
-           "是否保存更改？"),
-        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-           
-    if (ret == QMessageBox::Save) {
-        QString fileName = QFileDialog::getSaveFileName(this,
-            tr("另存为"), QString(),
-            tr("文本文件 (*.txt);;所有文件 (*)"));
-            
-        if (!fileName.isEmpty()) {
-            return saveFileAs(fileName);
+    if (tabManager->isCurrentTabModified()) {
+        QMessageBox::StandardButton ret = QMessageBox::warning(this, tr("MyNotepad"),
+            tr("文档已被修改。\n"
+               "是否保存更改？"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+               
+        if (ret == QMessageBox::Save) {
+            QString path = tabManager->currentTabPath();
+            if (path.isEmpty()) {
+                QString fileName = QFileDialog::getSaveFileName(this,
+                    tr("另存为"), QString(),
+                    tr("文本文件 (*.txt);;所有文件 (*)"));
+                    
+                if (!fileName.isEmpty()) {
+                    return saveFileAs(fileName);
+                }
+                return false;
+            } else {
+                return saveFileAs(path);
+            }
+        } else if (ret == QMessageBox::Cancel) {
+            return false;
         }
-        return false;
-    } else if (ret == QMessageBox::Cancel) {
-        return false;
     }
     return true;
 }
@@ -260,10 +305,12 @@ void MyNotepad::documentModified()
 
 void MyNotepad::updateCursorPosition()
 {
-    QTextCursor cursor = textEdit->textCursor();
-    statusLabel->setText(tr("Ln %1, Col %2")
-        .arg(cursor.blockNumber() + 1)
-        .arg(cursor.columnNumber() + 1));
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        QTextCursor cursor = editor->textCursor();
+        statusLabel->setText(tr("Ln %1, Col %2")
+            .arg(cursor.blockNumber() + 1)
+            .arg(cursor.columnNumber() + 1));
+    }
 }
 
 void MyNotepad::closeEvent(QCloseEvent *event)
@@ -278,51 +325,67 @@ void MyNotepad::closeEvent(QCloseEvent *event)
 // Edit operations
 void MyNotepad::undo()
 {
-    textEdit->undo();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->undo();
+    }
 }
 
 void MyNotepad::redo()
 {
-    textEdit->redo();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->redo();
+    }
 }
 
 void MyNotepad::cut()
 {
-    textEdit->cut();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->cut();
+    }
 }
 
 void MyNotepad::copy()
 {
-    textEdit->copy();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->copy();
+    }
 }
 
 void MyNotepad::paste()
 {
-    textEdit->paste();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->paste();
+    }
 }
 
 void MyNotepad::selectAll()
 {
-    textEdit->selectAll();
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        editor->selectAll();
+    }
 }
 
 // Format operations
 void MyNotepad::setFont()
 {
-    bool ok;
-    QFont font = QFontDialog::getFont(&ok, textEdit->font(), this);
-    if (ok) {
-        textEdit->setFont(font);
-        QSettings settings;
-        settings.setValue("font", font);
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        bool ok;
+        QFont font = QFontDialog::getFont(&ok, editor->font(), this);
+        if (ok) {
+            editor->setFont(font);
+            QSettings settings;
+            settings.setValue("font", font);
+        }
     }
 }
 
 void MyNotepad::setFontColor()
 {
-    QColor color = QColorDialog::getColor(textEdit->textColor(), this);
-    if (color.isValid()) {
-        textEdit->setTextColor(color);
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        QColor color = QColorDialog::getColor(editor->textColor(), this);
+        if (color.isValid()) {
+            editor->setTextColor(color);
+        }
     }
 }
 
@@ -330,7 +393,7 @@ void MyNotepad::setFontColor()
 void MyNotepad::find()
 {
     if (!findDialog) {
-        findDialog = new FindDialog(textEdit, this);
+        findDialog = new FindDialog(tabManager->currentEditor(), this);
     }
     findDialog->show();
     findDialog->raise();
@@ -340,7 +403,7 @@ void MyNotepad::find()
 void MyNotepad::replace()
 {
     if (!replaceDialog) {
-        replaceDialog = new ReplaceDialog(textEdit, this);
+        replaceDialog = new ReplaceDialog(tabManager->currentEditor(), this);
     }
     replaceDialog->show();
     replaceDialog->raise();
@@ -369,10 +432,12 @@ void MyNotepad::findPrevious()
 void MyNotepad::printFile()
 {
 #if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printer)
-    QPrinter printer(QPrinter::HighResolution);
-    QPrintDialog dialog(&printer, this);
-    if (dialog.exec() == QDialog::Accepted) {
-        textEdit->print(&printer);
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        QPrinter printer(QPrinter::HighResolution);
+        QPrintDialog dialog(&printer, this);
+        if (dialog.exec() == QDialog::Accepted) {
+            editor->print(&printer);
+        }
     }
 #endif
 }
@@ -381,18 +446,90 @@ void MyNotepad::printFile()
 void MyNotepad::about()
 {
     QMessageBox::about(this, tr("关于 MyNotepad"),
-        tr("此项目是基于Qt的简单文本编辑器。\n\n"
-           "版本： 1.0\n"
-           "Copyright (C) 2025 162210118-魏程浩"));
+        tr("MyNotepad 是一个基于 Qt 的简单文本编辑器。\n\n"
+           "版本：1.0\n"
+           "版权所有 (C) 2025\n"
+           "162210118-魏程浩"));
 }
 
-void MyNotepad::saveAsFile()
+// Language selection
+void MyNotepad::setLanguageJava()
 {
-    QString fileName = QFileDialog::getSaveFileName(this,
-        tr("另存为"), QString(),
-        tr("文本文件 (*.txt);;所有文件 (*)"));
-        
-    if (!fileName.isEmpty()) {
-        saveFileAs(fileName);
+    tabManager->setCurrentTabLanguage(SyntaxHighlighter::Java);
+    updateLanguageMenu();
+}
+
+void MyNotepad::setLanguageCpp()
+{
+    tabManager->setCurrentTabLanguage(SyntaxHighlighter::Cpp);
+    updateLanguageMenu();
+}
+
+void MyNotepad::setLanguagePython()
+{
+    tabManager->setCurrentTabLanguage(SyntaxHighlighter::Python);
+    updateLanguageMenu();
+}
+
+void MyNotepad::setLanguageNone()
+{
+    tabManager->setCurrentTabLanguage(SyntaxHighlighter::None);
+    updateLanguageMenu();
+}
+
+void MyNotepad::updateLanguageMenu()
+{
+    QMenu *languageMenu = menuBar()->findChild<QMenu*>("menuLanguage");
+    if (languageMenu) {
+        for (QAction *action : languageMenu->actions()) {
+            action->setChecked(false);
+        }
+        switch (tabManager->currentTabLanguage()) {
+            case SyntaxHighlighter::Java:
+                languageMenu->actions()[1]->setChecked(true);
+                break;
+            case SyntaxHighlighter::Cpp:
+                languageMenu->actions()[2]->setChecked(true);
+                break;
+            case SyntaxHighlighter::Python:
+                languageMenu->actions()[3]->setChecked(true);
+                break;
+            default:
+                languageMenu->actions()[0]->setChecked(true);
+                break;
+        }
+    }
+}
+
+// Tab management
+void MyNotepad::onTabChanged()
+{
+    updateWindowTitle();
+    updateCursorPosition();
+    updateLanguageMenu();
+}
+
+void MyNotepad::onTextChanged()
+{
+    updateWindowTitle();
+}
+
+void MyNotepad::setAutoSaveInterval()
+{
+    bool ok;
+    int minutes = QInputDialog::getInt(this, tr("自动保存间隔"),
+        tr("请输入自动保存间隔（分钟）："),
+        autoSaveManager->autoSaveInterval(), 1, 60, 1, &ok);
+    
+    if (ok) {
+        autoSaveManager->setAutoSaveInterval(minutes);
+    }
+}
+
+void MyNotepad::toggleAutoSave()
+{
+    QAction *action = qobject_cast<QAction*>(sender());
+    if (action) {
+        autoSaveManager->setAutoSaveEnabled(action->isChecked());
     }
 }
