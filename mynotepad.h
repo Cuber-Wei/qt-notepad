@@ -5,12 +5,15 @@
 #include <QTextEdit>
 #include <QLabel>
 #include <QTextCodec>
+#include <QMap>
+#include <QKeySequence>
 #include "syntaxhighlighter.h"
 #include "tabmanager.h"
 #include "autosavemanager.h"
 
 class FindDialog;
 class ReplaceDialog;
+class ShortcutDialog;
 
 namespace Ui {
 class MyNotepad;
@@ -75,6 +78,9 @@ private slots:
     void setAutoSaveInterval();
     void toggleAutoSave();
 
+    // Shortcut settings
+    void showShortcutSettings();
+
 private:
     Ui::MyNotepad *ui;
     TabManager *tabManager;
@@ -83,6 +89,9 @@ private:
     QLabel *encodingLabel;
     FindDialog *findDialog;
     ReplaceDialog *replaceDialog;
+    ShortcutDialog *shortcutDialog;
+    QMap<QString, QKeySequence> shortcuts;
+    QMap<QString, QAction*> actionMap;  // 存储菜单动作的映射
     
     void createMenus();
     void createToolBars();
@@ -94,6 +103,9 @@ private:
     void updateWindowTitle();
     bool maybeSave();
     void updateLanguageMenu();
+    void loadShortcuts();
+    void saveShortcuts();
+    void applyShortcuts();
 };
 
 #endif // MYNOTEPAD_H

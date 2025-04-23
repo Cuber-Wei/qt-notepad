@@ -31,7 +31,8 @@ SOURCES += \
         replacedialog.cpp \
         syntaxhighlighter.cpp \
         tabmanager.cpp \
-        autosavemanager.cpp
+        autosavemanager.cpp \
+        shortcutdialog.cpp
 
 HEADERS += \
         mynotepad.h \
@@ -39,15 +40,14 @@ HEADERS += \
         replacedialog.h \
         syntaxhighlighter.h \
         tabmanager.h \
-        autosavemanager.h
+        autosavemanager.h \
+        shortcutdialog.h
 
 FORMS += \
-        mynotepad.ui
+        mynotepad.ui \
+        shortcutdialog.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
-
-RESOURCES += \
-    image.qrc

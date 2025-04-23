@@ -2,6 +2,7 @@
 #include "ui_MyNotepad.h"
 #include "finddialog.h"
 #include "replacedialog.h"
+#include "shortcutdialog.h"
 #include <QMessageBox>
 #include <QFile>
 #include <QFileDialog>
@@ -40,7 +41,8 @@ MyNotepad::MyNotepad(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MyNotepad),
     findDialog(nullptr),
-    replaceDialog(nullptr)
+    replaceDialog(nullptr),
+    shortcutDialog(nullptr)
 {
     ui->setupUi(this);
     
@@ -65,8 +67,9 @@ MyNotepad::MyNotepad(QWidget *parent) :
     QSettings settings;
     QFont font = settings.value("font", QFont("Consolas", 10)).value<QFont>();
     
-    // 不再创建初始标签页
-    // 当用户第一次打开文件或新建文件时会自动创建标签页
+    // 加载快捷键设置
+    loadShortcuts();
+    applyShortcuts();
 
     // Restore auto-saved tabs
     autoSaveManager->restoreTabs();
@@ -74,61 +77,84 @@ MyNotepad::MyNotepad(QWidget *parent) :
 
 MyNotepad::~MyNotepad()
 {
+    saveShortcuts();
     delete ui;
     delete findDialog;
     delete replaceDialog;
+    delete shortcutDialog;
 }
 
 void MyNotepad::createMenus()
 {
     // 文件菜单
     QMenu *fileMenu = menuBar()->addMenu(tr("文件(&F)"));
-    fileMenu->addAction(tr("新建(&N)"), this, &MyNotepad::newFile, QKeySequence::New);
-    fileMenu->addAction(tr("打开(&O)..."), this, &MyNotepad::openFile, QKeySequence::Open);
-    fileMenu->addAction(tr("保存(&S)"), this, &MyNotepad::saveFile, QKeySequence::Save);
-    fileMenu->addAction(tr("另存为(&A)..."), this, &MyNotepad::saveAsFile, QKeySequence::SaveAs);
+    QAction *newAction = fileMenu->addAction(tr("新建(&N)"), this, &MyNotepad::newFile);
+    QAction *openAction = fileMenu->addAction(tr("打开(&O)..."), this, &MyNotepad::openFile);
+    QAction *saveAction = fileMenu->addAction(tr("保存(&S)"), this, &MyNotepad::saveFile);
+    QAction *saveAsAction = fileMenu->addAction(tr("另存为(&A)..."), this, &MyNotepad::saveAsFile);
     fileMenu->addSeparator();
-    fileMenu->addAction(tr("退出(&X)"), this, &QWidget::close, QKeySequence::Quit);
+    QAction *exitAction = fileMenu->addAction(tr("退出(&X)"), this, &QWidget::close);
 
     // 编辑菜单
     QMenu *editMenu = menuBar()->addMenu(tr("编辑(&E)"));
-    editMenu->addAction(tr("撤销(&U)"), this, &MyNotepad::undo, QKeySequence::Undo);
-    editMenu->addAction(tr("重做(&R)"), this, &MyNotepad::redo, QKeySequence::Redo);
+    QAction *undoAction = editMenu->addAction(tr("撤销(&U)"), this, &MyNotepad::undo);
+    QAction *redoAction = editMenu->addAction(tr("重做(&R)"), this, &MyNotepad::redo);
     editMenu->addSeparator();
-    editMenu->addAction(tr("剪切(&T)"), this, &MyNotepad::cut, QKeySequence::Cut);
-    editMenu->addAction(tr("复制(&C)"), this, &MyNotepad::copy, QKeySequence::Copy);
-    editMenu->addAction(tr("粘贴(&P)"), this, &MyNotepad::paste, QKeySequence::Paste);
-    editMenu->addAction(tr("全选(&A)"), this, &MyNotepad::selectAll, QKeySequence::SelectAll);
+    QAction *cutAction = editMenu->addAction(tr("剪切(&T)"), this, &MyNotepad::cut);
+    QAction *copyAction = editMenu->addAction(tr("复制(&C)"), this, &MyNotepad::copy);
+    QAction *pasteAction = editMenu->addAction(tr("粘贴(&P)"), this, &MyNotepad::paste);
+    QAction *selectAllAction = editMenu->addAction(tr("全选(&A)"), this, &MyNotepad::selectAll);
 
     // 格式菜单
     QMenu *formatMenu = menuBar()->addMenu(tr("格式(&O)"));
-    formatMenu->addAction(tr("字体(&F)..."), this, &MyNotepad::setFont);
-    formatMenu->addAction(tr("字体颜色(&C)..."), this, &MyNotepad::setFontColor);
+    QAction *fontAction = formatMenu->addAction(tr("字体(&F)..."), this, &MyNotepad::setFont);
+    QAction *fontColorAction = formatMenu->addAction(tr("字体颜色(&C)..."), this, &MyNotepad::setFontColor);
 
     // 语言菜单
     QMenu *languageMenu = menuBar()->addMenu(tr("语言(&L)"));
-    languageMenu->addAction(tr("无(&N)"), this, &MyNotepad::setLanguageNone);
-    languageMenu->addAction(tr("Java(&J)"), this, &MyNotepad::setLanguageJava);
-    languageMenu->addAction(tr("C++(&C)"), this, &MyNotepad::setLanguageCpp);
-    languageMenu->addAction(tr("Python(&P)"), this, &MyNotepad::setLanguagePython);
+    QAction *noneAction = languageMenu->addAction(tr("无(&N)"), this, &MyNotepad::setLanguageNone);
+    QAction *javaAction = languageMenu->addAction(tr("Java(&J)"), this, &MyNotepad::setLanguageJava);
+    QAction *cppAction = languageMenu->addAction(tr("C++(&C)"), this, &MyNotepad::setLanguageCpp);
+    QAction *pythonAction = languageMenu->addAction(tr("Python(&P)"), this, &MyNotepad::setLanguagePython);
 
     // 查找菜单
     QMenu *findMenu = menuBar()->addMenu(tr("查找(&S)"));
-    findMenu->addAction(tr("查找(&F)..."), this, &MyNotepad::find, QKeySequence::Find);
-    findMenu->addAction(tr("查找下一个(&N)"), this, &MyNotepad::findNext, QKeySequence::FindNext);
-    findMenu->addAction(tr("查找上一个(&P)"), this, &MyNotepad::findPrevious, QKeySequence::FindPrevious);
-    findMenu->addAction(tr("替换(&R)..."), this, &MyNotepad::replace, QKeySequence::Replace);
+    QAction *findAction = findMenu->addAction(tr("查找(&F)..."), this, &MyNotepad::find);
+    QAction *findNextAction = findMenu->addAction(tr("查找下一个(&N)"), this, &MyNotepad::findNext);
+    QAction *findPrevAction = findMenu->addAction(tr("查找上一个(&P)"), this, &MyNotepad::findPrevious);
+    QAction *replaceAction = findMenu->addAction(tr("替换(&R)..."), this, &MyNotepad::replace);
 
     // 自动保存菜单
     QMenu *autoSaveMenu = menuBar()->addMenu(tr("自动保存(&A)"));
     QAction *enableAutoSaveAction = autoSaveMenu->addAction(tr("启用自动保存(&E)"), this, &MyNotepad::toggleAutoSave);
     enableAutoSaveAction->setCheckable(true);
     enableAutoSaveAction->setChecked(autoSaveManager->isAutoSaveEnabled());
-    autoSaveMenu->addAction(tr("设置间隔(&I)..."), this, &MyNotepad::setAutoSaveInterval);
+    QAction *setIntervalAction = autoSaveMenu->addAction(tr("设置间隔(&I)..."), this, &MyNotepad::setAutoSaveInterval);
+
+    // 设置菜单
+    QMenu *settingsMenu = menuBar()->addMenu(tr("设置(&S)"));
+    QAction *shortcutAction = settingsMenu->addAction(tr("快捷键设置(&K)..."), this, &MyNotepad::showShortcutSettings);
 
     // 帮助菜单
     QMenu *helpMenu = menuBar()->addMenu(tr("帮助(&H)"));
-    helpMenu->addAction(tr("关于(&A)"), this, &MyNotepad::about);
+    QAction *aboutAction = helpMenu->addAction(tr("关于(&A)"), this, &MyNotepad::about);
+
+    // 存储所有动作的映射
+    actionMap["新建"] = newAction;
+    actionMap["打开"] = openAction;
+    actionMap["保存"] = saveAction;
+    actionMap["另存为"] = saveAsAction;
+    actionMap["退出"] = exitAction;
+    actionMap["撤销"] = undoAction;
+    actionMap["重做"] = redoAction;
+    actionMap["剪切"] = cutAction;
+    actionMap["复制"] = copyAction;
+    actionMap["粘贴"] = pasteAction;
+    actionMap["全选"] = selectAllAction;
+    actionMap["查找"] = findAction;
+    actionMap["查找下一个"] = findNextAction;
+    actionMap["查找上一个"] = findPrevAction;
+    actionMap["替换"] = replaceAction;
 }
 
 void MyNotepad::createToolBars()
@@ -531,5 +557,58 @@ void MyNotepad::toggleAutoSave()
     QAction *action = qobject_cast<QAction*>(sender());
     if (action) {
         autoSaveManager->setAutoSaveEnabled(action->isChecked());
+    }
+}
+
+void MyNotepad::showShortcutSettings()
+{
+    if (!shortcutDialog) {
+        shortcutDialog = new ShortcutDialog(this);
+    }
+    shortcutDialog->setShortcuts(shortcuts);
+    
+    if (shortcutDialog->exec() == QDialog::Accepted) {
+        shortcuts = shortcutDialog->getShortcuts();
+        saveShortcuts();
+        applyShortcuts();
+    }
+}
+
+void MyNotepad::loadShortcuts()
+{
+    QSettings settings;
+    settings.beginGroup("Shortcuts");
+    
+    // 加载所有快捷键
+    for (const QString& key : settings.allKeys()) {
+        QString value = settings.value(key).toString();
+        if (!value.isEmpty()) {
+            shortcuts[key] = QKeySequence::fromString(value);
+        }
+    }
+    
+    settings.endGroup();
+}
+
+void MyNotepad::saveShortcuts()
+{
+    QSettings settings;
+    settings.beginGroup("Shortcuts");
+    
+    // 保存所有快捷键
+    for (auto it = shortcuts.begin(); it != shortcuts.end(); ++it) {
+        settings.setValue(it.key(), it.value().toString());
+    }
+    
+    settings.endGroup();
+}
+
+void MyNotepad::applyShortcuts()
+{
+    // 应用所有快捷键
+    for (auto it = shortcuts.begin(); it != shortcuts.end(); ++it) {
+        if (actionMap.contains(it.key())) {
+            actionMap[it.key()]->setShortcut(it.value());
+        }
     }
 }
