@@ -89,21 +89,32 @@ void MyNotepad::createMenus()
     // 文件菜单
     QMenu *fileMenu = menuBar()->addMenu(tr("文件(&F)"));
     QAction *newAction = fileMenu->addAction(tr("新建(&N)"), this, &MyNotepad::newFile);
+    newAction->setShortcut(QKeySequence::New);
     QAction *openAction = fileMenu->addAction(tr("打开(&O)..."), this, &MyNotepad::openFile);
+    openAction->setShortcut(QKeySequence::Open);
     QAction *saveAction = fileMenu->addAction(tr("保存(&S)"), this, &MyNotepad::saveFile);
+    saveAction->setShortcut(QKeySequence::Save);
     QAction *saveAsAction = fileMenu->addAction(tr("另存为(&A)..."), this, &MyNotepad::saveAsFile);
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
     fileMenu->addSeparator();
     QAction *exitAction = fileMenu->addAction(tr("退出(&X)"), this, &QWidget::close);
+    exitAction->setShortcut(QKeySequence::Quit);
 
     // 编辑菜单
     QMenu *editMenu = menuBar()->addMenu(tr("编辑(&E)"));
     QAction *undoAction = editMenu->addAction(tr("撤销(&U)"), this, &MyNotepad::undo);
+    undoAction->setShortcut(QKeySequence::Undo);
     QAction *redoAction = editMenu->addAction(tr("重做(&R)"), this, &MyNotepad::redo);
+    redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *cutAction = editMenu->addAction(tr("剪切(&T)"), this, &MyNotepad::cut);
+    cutAction->setShortcut(QKeySequence::Cut);
     QAction *copyAction = editMenu->addAction(tr("复制(&C)"), this, &MyNotepad::copy);
+    copyAction->setShortcut(QKeySequence::Copy);
     QAction *pasteAction = editMenu->addAction(tr("粘贴(&P)"), this, &MyNotepad::paste);
+    pasteAction->setShortcut(QKeySequence::Paste);
     QAction *selectAllAction = editMenu->addAction(tr("全选(&A)"), this, &MyNotepad::selectAll);
+    selectAllAction->setShortcut(QKeySequence::SelectAll);
 
     // 格式菜单
     QMenu *formatMenu = menuBar()->addMenu(tr("格式(&O)"));
@@ -120,9 +131,13 @@ void MyNotepad::createMenus()
     // 查找菜单
     QMenu *findMenu = menuBar()->addMenu(tr("查找(&S)"));
     QAction *findAction = findMenu->addAction(tr("查找(&F)..."), this, &MyNotepad::find);
+    findAction->setShortcut(QKeySequence::Find);
     QAction *findNextAction = findMenu->addAction(tr("查找下一个(&N)"), this, &MyNotepad::findNext);
+    findNextAction->setShortcut(QKeySequence::FindNext);
     QAction *findPrevAction = findMenu->addAction(tr("查找上一个(&P)"), this, &MyNotepad::findPrevious);
+    findPrevAction->setShortcut(QKeySequence::FindPrevious);
     QAction *replaceAction = findMenu->addAction(tr("替换(&R)..."), this, &MyNotepad::replace);
+    replaceAction->setShortcut(QKeySequence::Replace);
 
     // 自动保存菜单
     QMenu *autoSaveMenu = menuBar()->addMenu(tr("自动保存(&A)"));
@@ -183,6 +198,11 @@ void MyNotepad::setupConnections()
 {
     connect(tabManager, &TabManager::currentTabChanged, this, &MyNotepad::onTabChanged);
     connect(tabManager, &TabManager::textChanged, this, &MyNotepad::onTextChanged);
+    
+    // Connect cursor position changes
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        connect(editor, &QTextEdit::cursorPositionChanged, this, &MyNotepad::updateCursorPosition);
+    }
 }
 
 void MyNotepad::newFile()
@@ -533,6 +553,11 @@ void MyNotepad::onTabChanged()
     updateWindowTitle();
     updateCursorPosition();
     updateLanguageMenu();
+    
+    // Reconnect cursor position signal for the new editor
+    if (QTextEdit *editor = tabManager->currentEditor()) {
+        connect(editor, &QTextEdit::cursorPositionChanged, this, &MyNotepad::updateCursorPosition);
+    }
 }
 
 void MyNotepad::onTextChanged()

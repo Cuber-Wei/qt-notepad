@@ -44,7 +44,7 @@ void AutoSaveManager::setAutoSaveInterval(int minutes)
 
 int AutoSaveManager::autoSaveInterval() const
 {
-    return saveInterval;
+    return autoSaveTimer->interval() / 60000;
 }
 
 void AutoSaveManager::setAutoSaveEnabled(bool enabled)
@@ -61,7 +61,7 @@ void AutoSaveManager::setAutoSaveEnabled(bool enabled)
 
 bool AutoSaveManager::isAutoSaveEnabled() const
 {
-    return autoSaveEnabled;
+    return autoSaveTimer->isActive();
 }
 
 void AutoSaveManager::saveAllTabs()
